@@ -17,27 +17,28 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Copy the user scripts
-mkdir -p /root/userscripts
-cp -r $USERSCRIPTS_DIR/. /root/userscripts
-find /root/userscripts ! -type d ! -user root -exec echo ">> [$(date)] {} is not owned by root, removing" \; -exec rm {} \;
-find /root/userscripts ! -type d -perm /g=w,o=w -exec echo ">> [$(date)] {} is writable by non-root users, removing" \; -exec rm {} \;
+export SIGN_BUILDS=false
+export SRC_DIR=/data/lineageOS
+export MICROG_DIR=/data/microG/src
+export BRANCH_NAME=lineage-17.1
+export DEVICE_LIST=FP3
+export SIGNATURE_SPOOFING=restricted
+export CUSTOM_PACKAGES='GmsCore GsfProxy FakeStore MozillaNlpBackend NominatimNlpBackend com.google.android.maps.jar FDroid FDroidPrivilegedExtension'
 
-# Initialize CCache if it will be used
-if [ "$USE_CCACHE" = 1 ]; then
-  ccache -M $CCACHE_SIZE 2>&1
-fi
+export RELEASE_TYPE=userdebug
+export ZIP_DIR=/tmp/microG/out
+export LOGS_DIR=/tmp/microG/logs
+export INCLUDE_PROPRIETARY=true
 
-# Initialize Git user information
-git config --global user.name $USER_NAME
-git config --global user.email $USER_MAIL
+mkdir -p $ZIP_DIR
+mkdir -p $LOGS_DIR
 
 if [ "$SIGN_BUILDS" = true ]; then
   if [ -z "$(ls -A "$KEYS_DIR")" ]; then
     echo ">> [$(date)] SIGN_BUILDS = true but empty \$KEYS_DIR, generating new keys"
     for c in releasekey platform shared media networkstack; do
       echo ">> [$(date)]  Generating $c..."
-      /root/make_key "$KEYS_DIR/$c" "$KEYS_SUBJECT" <<< '' &> /dev/null
+      $MICROG_DIR/make_key "$KEYS_DIR/$c" "$KEYS_SUBJECT" <<< '' &> /dev/null
     done
   else
     for c in releasekey platform shared media networkstack; do
@@ -57,17 +58,4 @@ if [ "$SIGN_BUILDS" = true ]; then
   done
 fi
 
-if [ "$CRONTAB_TIME" = "now" ]; then
-  /root/build.sh
-else
-  # Initialize the cronjob
-  cronFile=/tmp/buildcron
-  printf "SHELL=/bin/bash\n" > $cronFile
-  printenv -0 | sed -e 's/=\x0/=""\n/g'  | sed -e 's/\x0/\n/g' | sed -e "s/_=/PRINTENV=/g" >> $cronFile
-  printf "\n$CRONTAB_TIME /usr/bin/flock -n /var/lock/build.lock /root/build.sh >> /var/log/docker.log 2>&1\n" >> $cronFile
-  crontab $cronFile
-  rm $cronFile
-
-  # Run crond in foreground
-  cron -f 2>&1
-fi
+$MICROG_DIR/build.sh
